@@ -686,21 +686,25 @@ def load_from_zip(uploaded_file):
             agent2_data = json.loads(zf.read("agent2.json"))
             config = json.loads(zf.read("config.json"))
             
-            # Load training stats if available
+            # Load training stats
             training_stats = None
             if "training_stats.json" in zf.namelist():
                 loaded_stats = json.loads(zf.read("training_stats.json"))
                 
-                # --- COMPATIBILITY FIX: Normalize Keys ---
+                # --- ROBUST COMPATIBILITY FIX ---
                 training_stats = {}
                 
-                # 1. Fix 'episodes' (Kaggle) -> 'episode' (App)
-                if 'episodes' in loaded_stats:
+                # 1. Force 'episodes' (Kaggle) -> 'episode' (App)
+                if 'episodes' in loaded_stats and len(loaded_stats['episodes']) > 0:
                     training_stats['episode'] = loaded_stats['episodes']
+                elif 'episode' in loaded_stats:
+                    training_stats['episode'] = loaded_stats['episode']
                 else:
-                    training_stats['episode'] = loaded_stats.get('episode', [])
+                    # Fallback: create an index if missing
+                    max_len = len(loaded_stats.get('agent1_wins', []))
+                    training_stats['episode'] = list(range(1, max_len + 1))
 
-                # 2. Fix 'agent_q_size' (Kaggle) -> 'agent_q' (App)
+                # 2. Force 'agent_q_size' (Kaggle) -> 'agent_q' (App)
                 if 'agent1_q_size' in loaded_stats:
                     training_stats['agent1_q'] = loaded_stats['agent1_q_size']
                     training_stats['agent2_q'] = loaded_stats['agent2_q_size']
@@ -708,39 +712,28 @@ def load_from_zip(uploaded_file):
                     training_stats['agent1_q'] = loaded_stats.get('agent1_q', [])
                     training_stats['agent2_q'] = loaded_stats.get('agent2_q', [])
                 
-                # 3. Copy the rest of the stats directly
+                # 3. Copy other metrics safely
                 for key in ['agent1_wins', 'agent2_wins', 'draws', 'agent1_epsilon', 'agent2_epsilon']:
-                    if key in loaded_stats:
-                        training_stats[key] = loaded_stats[key]
-                # ------------------------------------------
+                    training_stats[key] = loaded_stats.get(key, [])
+                # --------------------------------
 
-            # Load metadata if available
-            metadata = None
+            # Metadata check
             if "metadata.json" in zf.namelist():
                 metadata = json.loads(zf.read("metadata.json"))
                 if metadata:
-                    st.toast(f"📦 Loaded Model: {metadata.get('timestamp', 'Unknown Date')}", icon="✅")
+                    st.toast(f"📦 Model Timestamp: {metadata.get('timestamp', 'Unknown')}", icon="✅")
             
-            # Reconstruct Agent 1
+            # Reconstruct Agents
             agent1 = SuperTTTAgent(1, agent1_data['lr'], agent1_data['gamma'])
-            # Ensure you are using the updated deserialize function from the previous step!
             agent1.q_table = deserialize_q_table(agent1_data['q_table'])
             agent1.epsilon = agent1_data['epsilon']
-            agent1.minimax_depth = agent1_data.get('minimax_depth', 2)
-            agent1.wins = agent1_data.get('wins', 0)
-            agent1.losses = agent1_data.get('losses', 0)
-            agent1.draws = agent1_data.get('draws', 0)
             
-            # Reconstruct Agent 2
             agent2 = SuperTTTAgent(2, agent2_data['lr'], agent2_data['gamma'])
             agent2.q_table = deserialize_q_table(agent2_data['q_table'])
             agent2.epsilon = agent2_data['epsilon']
-            agent2.minimax_depth = agent2_data.get('minimax_depth', 2)
-            agent2.wins = agent2_data.get('wins', 0)
-            agent2.losses = agent2_data.get('losses', 0)
-            agent2.draws = agent2_data.get('draws', 0)
             
             return agent1, agent2, config, training_stats
+
     except Exception as e:
         st.error(f"Load failed: {e}")
         return None, None, None, None
@@ -892,21 +885,35 @@ if train_btn:
     st.session_state.agent2 = agent2
 
 # Charts
+# Charts
 if 'history' in st.session_state and st.session_state.history:
     st.subheader("📊 Training Analytics")
     hist = st.session_state.history
     df = pd.DataFrame(hist)
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.write("#### Performance")
-        st.line_chart(df.set_index('episode')[['agent1_wins', 'agent2_wins', 'draws']])
-    with c2:
-        st.write("#### Exploration")
-        st.line_chart(df.set_index('episode')[['agent1_epsilon', 'agent2_epsilon']])
-    
-    st.write("#### Knowledge Growth")
-    st.line_chart(df.set_index('episode')[['agent1_q', 'agent2_q']])
+    if df.empty:
+        st.warning("⚠️ Training history is empty. Train more episodes to see charts.")
+    else:
+        # Safety Check: Ensure 'episode' column exists
+        x_axis = 'episode' if 'episode' in df.columns else None
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("#### Performance")
+            # Automatically uses index if x_axis is None
+            chart_data = df.set_index(x_axis) if x_axis else df
+            st.line_chart(chart_data[['agent1_wins', 'agent2_wins', 'draws']])
+            
+        with c2:
+            st.write("#### Exploration")
+            st.line_chart(chart_data[['agent1_epsilon', 'agent2_epsilon']])
+        
+        st.write("#### Knowledge Growth")
+        # Handle Q-table size plotting safely
+        if 'agent1_q' in df.columns:
+            st.line_chart(chart_data[['agent1_q', 'agent2_q']])
+        else:
+            st.info("Q-Table size history not found in this save.")
 
 # Demo battle
 if 'agent1' in st.session_state and len(agent1.q_table) > 0:

@@ -589,32 +589,53 @@ def visualize_super_board(env, title="Super Tic-Tac-Toe"):
 # ============================================================================
 
 def serialize_q_table(q_table):
+    """Ultra-compact serialization - matches Kaggle format"""
     serialized = {}
+    
     for (state, action), value in q_table.items():
-        # Convert state and action to JSON-serializable format
-        state_str = json.dumps([
-            [list(map(int, board)) for board in state[0]],
-            list(map(int, state[1])),
-            state[2]
-        ])
-        action_str = json.dumps(list(map(int, action)))
-        key = f"{state_str}||{action_str}"
-        serialized[key] = float(value)
+        # Compact string representation
+        small_boards_str = ','.join([''.join(map(str, board)) for board in state[0]])
+        meta_str = ''.join(map(str, state[1]))
+        active_str = str(state[2]) if state[2] is not None else 'N'
+        
+        # Action: (board_idx, row, col)
+        action_str = f"{action[0]}{action[1]}{action[2]}"
+        
+        # Combine into single compact key
+        key = f"{small_boards_str}|{meta_str}|{active_str}|{action_str}"
+        
+        # Store only significant digits to reduce size
+        serialized[key] = round(float(value), 4)
+    
     return serialized
 
 def deserialize_q_table(serialized):
+    """Deserialize the compact format - matches Kaggle format"""
     q_table = {}
+    
     for key, value in serialized.items():
-        state_str, action_str = key.split("||")
-        state_data = json.loads(state_str)
+        parts = key.split('|')
         
-        # Reconstruct state tuple
-        small_boards = tuple(tuple(board) for board in state_data[0])
-        meta_board = tuple(state_data[1])
-        active_board = state_data[2]
+        # Parse small boards
+        boards_str = parts[0].split(',')
+        small_boards = tuple(
+            tuple(int(c) for c in board_str)
+            for board_str in boards_str
+        )
+        
+        # Parse meta board
+        meta_board = tuple(int(c) for c in parts[1])
+        
+        # Parse active board
+        active_board = None if parts[2] == 'N' else int(parts[2])
+        
+        # Parse action
+        action_str = parts[3]
+        action = (int(action_str[0]), int(action_str[1]), int(action_str[2]))
+        
+        # Reconstruct state
         state = (small_boards, meta_board, active_board)
         
-        action = tuple(json.loads(action_str))
         q_table[(state, action)] = value
     
     return q_table
@@ -658,6 +679,19 @@ def load_from_zip(uploaded_file):
             agent2_data = json.loads(zf.read("agent2.json"))
             config = json.loads(zf.read("config.json"))
             
+            # Load training stats if available
+            training_stats = None
+            if "training_stats.json" in zf.namelist():
+                training_stats = json.loads(zf.read("training_stats.json"))
+            
+            # Load metadata if available
+            metadata = None
+            if "metadata.json" in zf.namelist():
+                metadata = json.loads(zf.read("metadata.json"))
+                if metadata:
+                    st.info(f"📦 Loaded model trained on {metadata.get('trained_episodes', 'N/A'):,} episodes | "
+                           f"Q-States: {metadata.get('final_q_size_agent1', 'N/A'):,} + {metadata.get('final_q_size_agent2', 'N/A'):,}")
+            
             agent1 = SuperTTTAgent(1, agent1_data['lr'], agent1_data['gamma'])
             agent1.q_table = deserialize_q_table(agent1_data['q_table'])
             agent1.epsilon = agent1_data['epsilon']
@@ -674,10 +708,10 @@ def load_from_zip(uploaded_file):
             agent2.losses = agent2_data.get('losses', 0)
             agent2.draws = agent2_data.get('draws', 0)
             
-            return agent1, agent2, config
+            return agent1, agent2, config, training_stats
     except Exception as e:
         st.error(f"Load failed: {e}")
-        return None, None, None
+        return None, None, None, None
 
 # ============================================================================
 # UI
@@ -712,8 +746,11 @@ with st.sidebar.expander("4️⃣ Storage", expanded=False):
         config = {
             "lr1": lr1, "gamma1": gamma1, "minimax1": minimax1,
             "lr2": lr2, "gamma2": gamma2, "minimax2": minimax2,
-            "training_history": st.session_state.get('history', None)
         }
+        
+        # Include training history if it exists
+        if 'history' in st.session_state:
+            config['training_stats'] = st.session_state.history
         
         zip_data = create_zip(st.session_state.agent1, st.session_state.agent2, config)
         st.download_button(
@@ -728,11 +765,12 @@ with st.sidebar.expander("4️⃣ Storage", expanded=False):
     
     uploaded = st.file_uploader("Upload Agents (.zip)", type="zip")
     if uploaded and st.button("📥 Load Agents", use_container_width=True):
-        a1, a2, cfg = load_from_zip(uploaded)
+        a1, a2, cfg, train_stats = load_from_zip(uploaded)
         if a1:
             st.session_state.agent1 = a1
             st.session_state.agent2 = a2
-            st.session_state.history = cfg.get('training_history')
+            if train_stats:
+                st.session_state.history = train_stats
             st.toast("Agents loaded!", icon="💾")
             st.rerun()
 

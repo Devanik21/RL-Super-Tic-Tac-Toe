@@ -614,7 +614,7 @@ def serialize_q_table(q_table):
 
 
 def deserialize_q_table(serialized):
-    """Deserialize the compact format - matches Kaggle format"""
+    """Deserialize the compact format - Updated for Turbo Agent"""
     q_table = {}
     
     for key, value in serialized.items():
@@ -627,7 +627,8 @@ def deserialize_q_table(serialized):
             for board_str in boards_str
         )
         
-        # FIX: Split by comma to parse negative numbers (-1) correctly
+        # FIX: Split by comma to correctly parse '-1' (draws)
+        # The app previously tried to read char-by-char, which caused the crash
         meta_board = tuple(int(x) for x in parts[1].split(','))
         
         # Parse active board

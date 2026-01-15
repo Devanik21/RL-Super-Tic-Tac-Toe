@@ -595,7 +595,10 @@ def serialize_q_table(q_table):
     for (state, action), value in q_table.items():
         # Compact string representation
         small_boards_str = ','.join([''.join(map(str, board)) for board in state[0]])
-        meta_str = ''.join(map(str, state[1]))
+        
+        # FIX: Use comma delimiter for meta_board to handle -1 (draws) correctly
+        meta_str = ','.join(map(str, state[1]))
+        
         active_str = str(state[2]) if state[2] is not None else 'N'
         
         # Action: (board_idx, row, col)
@@ -608,6 +611,7 @@ def serialize_q_table(q_table):
         serialized[key] = round(float(value), 4)
     
     return serialized
+
 
 def deserialize_q_table(serialized):
     """Deserialize the compact format - matches Kaggle format"""
@@ -623,8 +627,8 @@ def deserialize_q_table(serialized):
             for board_str in boards_str
         )
         
-        # Parse meta board
-        meta_board = tuple(int(c) for c in parts[1])
+        # FIX: Split by comma to parse negative numbers (-1) correctly
+        meta_board = tuple(int(x) for x in parts[1].split(','))
         
         # Parse active board
         active_board = None if parts[2] == 'N' else int(parts[2])
@@ -639,6 +643,8 @@ def deserialize_q_table(serialized):
         q_table[(state, action)] = value
     
     return q_table
+
+
 
 def create_zip(agent1, agent2, config):
     agent1_data = {

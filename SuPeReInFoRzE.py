@@ -723,14 +723,23 @@ def load_from_zip(uploaded_file):
                 if metadata:
                     st.toast(f"📦 Model Timestamp: {metadata.get('timestamp', 'Unknown')}", icon="✅")
             
-            # Reconstruct Agents
+            # Reconstruct Agent 1
             agent1 = SuperTTTAgent(1, agent1_data['lr'], agent1_data['gamma'])
             agent1.q_table = deserialize_q_table(agent1_data['q_table'])
             agent1.epsilon = agent1_data['epsilon']
+            # --- FIX: LOAD STATS ---
+            agent1.wins = agent1_data.get('wins', 0)
+            agent1.losses = agent1_data.get('losses', 0)
+            agent1.draws = agent1_data.get('draws', 0)
             
+            # Reconstruct Agent 2
             agent2 = SuperTTTAgent(2, agent2_data['lr'], agent2_data['gamma'])
             agent2.q_table = deserialize_q_table(agent2_data['q_table'])
             agent2.epsilon = agent2_data['epsilon']
+            # --- FIX: LOAD STATS ---
+            agent2.wins = agent2_data.get('wins', 0)
+            agent2.losses = agent2_data.get('losses', 0)
+            agent2.draws = agent2_data.get('draws', 0)
             
             return agent1, agent2, config, training_stats
 

@@ -760,7 +760,7 @@ with st.sidebar.expander("1️⃣ Agent Configuration", expanded=True):
     
     lr1 = st.slider("Learning Rate α₁", 0.01, 0.5, 0.1, 0.01)
     gamma1 = st.slider("Discount γ₁", 0.8, 0.99, 0.95, 0.01)
-    minimax1 = st.slider("Minimax Depth₁", 1, 4, 2)
+    minimax1 = st.slider("Minimax Depth₁", 1, 12, 2)
 
 with st.sidebar.expander("2️⃣ Opponent Configuration", expanded=True):
     if 'lr2' not in st.session_state: st.session_state.lr2 = 0.1
@@ -769,7 +769,7 @@ with st.sidebar.expander("2️⃣ Opponent Configuration", expanded=True):
     
     lr2 = st.slider("Learning Rate α₂", 0.01, 0.5, 0.1, 0.01)
     gamma2 = st.slider("Discount γ₂", 0.8, 0.99, 0.95, 0.01)
-    minimax2 = st.slider("Minimax Depth₂", 1, 4, 2)
+    minimax2 = st.slider("Minimax Depth₂", 1, 12, 2)
 
 with st.sidebar.expander("3️⃣ Training Setup", expanded=True):
     episodes = st.number_input("Episodes", 100, 100000, 5000, 100)

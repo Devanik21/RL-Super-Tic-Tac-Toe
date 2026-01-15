@@ -689,17 +689,41 @@ def load_from_zip(uploaded_file):
             # Load training stats if available
             training_stats = None
             if "training_stats.json" in zf.namelist():
-                training_stats = json.loads(zf.read("training_stats.json"))
-            
+                loaded_stats = json.loads(zf.read("training_stats.json"))
+                
+                # --- COMPATIBILITY FIX: Normalize Keys ---
+                training_stats = {}
+                
+                # 1. Fix 'episodes' (Kaggle) -> 'episode' (App)
+                if 'episodes' in loaded_stats:
+                    training_stats['episode'] = loaded_stats['episodes']
+                else:
+                    training_stats['episode'] = loaded_stats.get('episode', [])
+
+                # 2. Fix 'agent_q_size' (Kaggle) -> 'agent_q' (App)
+                if 'agent1_q_size' in loaded_stats:
+                    training_stats['agent1_q'] = loaded_stats['agent1_q_size']
+                    training_stats['agent2_q'] = loaded_stats['agent2_q_size']
+                else:
+                    training_stats['agent1_q'] = loaded_stats.get('agent1_q', [])
+                    training_stats['agent2_q'] = loaded_stats.get('agent2_q', [])
+                
+                # 3. Copy the rest of the stats directly
+                for key in ['agent1_wins', 'agent2_wins', 'draws', 'agent1_epsilon', 'agent2_epsilon']:
+                    if key in loaded_stats:
+                        training_stats[key] = loaded_stats[key]
+                # ------------------------------------------
+
             # Load metadata if available
             metadata = None
             if "metadata.json" in zf.namelist():
                 metadata = json.loads(zf.read("metadata.json"))
                 if metadata:
-                    st.info(f"📦 Loaded model trained on {metadata.get('trained_episodes', 'N/A'):,} episodes | "
-                           f"Q-States: {metadata.get('final_q_size_agent1', 'N/A'):,} + {metadata.get('final_q_size_agent2', 'N/A'):,}")
+                    st.toast(f"📦 Loaded Model: {metadata.get('timestamp', 'Unknown Date')}", icon="✅")
             
+            # Reconstruct Agent 1
             agent1 = SuperTTTAgent(1, agent1_data['lr'], agent1_data['gamma'])
+            # Ensure you are using the updated deserialize function from the previous step!
             agent1.q_table = deserialize_q_table(agent1_data['q_table'])
             agent1.epsilon = agent1_data['epsilon']
             agent1.minimax_depth = agent1_data.get('minimax_depth', 2)
@@ -707,6 +731,7 @@ def load_from_zip(uploaded_file):
             agent1.losses = agent1_data.get('losses', 0)
             agent1.draws = agent1_data.get('draws', 0)
             
+            # Reconstruct Agent 2
             agent2 = SuperTTTAgent(2, agent2_data['lr'], agent2_data['gamma'])
             agent2.q_table = deserialize_q_table(agent2_data['q_table'])
             agent2.epsilon = agent2_data['epsilon']
